@@ -1,17 +1,18 @@
 import telebot
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from database import *
 import datetime
 import threading
 import time
 import os
 
-API_TOKEN = "7832902735:AAGJzhg00l7x2R8jr-eonf5KZF9c8QYQaCY"
+API_TOKEN = 7832902735:AAGJzhg00l7x2R8jr-eonf5KZF9c8QYQaCY
 ALLOWED_USER_ID = 350902460
 
 bot = telebot.TeleBot(API_TOKEN)
 user_states = {}
 client_data = {}
+message_history = {}
 
 def is_authorized(message):
     return message.from_user.id == ALLOWED_USER_ID
@@ -19,14 +20,8 @@ def is_authorized(message):
 def reset_user_state(user_id):
     user_states.pop(user_id, None)
     client_data.pop(user_id, None)
+    message_history.pop(user_id, None)
 
-@bot.message_handler(commands=['start'])
-def start(message):
-    if not is_authorized(message):
-        return bot.reply_to(message, "У тебя нет доступа к этому боту.")
-    show_menu(message)
-
-@bot.message_handler(commands=['menu'])
 def show_menu(message):
     markup = ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("➕ Добавить", "✏️ Редактировать")
@@ -35,6 +30,67 @@ def show_menu(message):
     markup.add("⬇️ Выгрузить базу", "🧨 Очистить всю базу")
     bot.send_message(message.chat.id, "Меню команд", reply_markup=markup)
 
+@bot.message_handler(commands=['start'])
+def start(message):
+    if not is_authorized(message):
+        return bot.reply_to(message, "У тебя нет доступа к этому боту.")
+    show_menu(message)
+
+@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "📋 Список клиентов")
+def handle_list_clients(message):
+    clients = get_all_clients_text()
+    if not clients:
+        bot.send_message(message.chat.id, "Клиентов пока нет.")
+    for entry in clients:
+        bot.send_message(message.chat.id, entry)
+
+@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "🗑 Удалить")
+def start_delete(message):
+    bot.send_message(message.chat.id, "Введите номер телефона клиента для удаления:")
+    user_states[message.chat.id] = "delete_phone"
+
+@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "delete_phone")
+def confirm_delete(message):
+    phone = message.text.strip()
+    data = get_client_block(phone)
+    if not data:
+        bot.send_message(message.chat.id, "Клиент не найден.")
+        reset_user_state(message.chat.id)
+        return show_menu(message)
+    client_data[message.chat.id] = phone
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add("Да", "Нет")
+    bot.send_message(message.chat.id, f"Найден клиент:\n\n{data}\n\nУдалить?", reply_markup=markup)
+    user_states[message.chat.id] = "delete_confirm"
+
+@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "delete_confirm")
+def handle_delete_confirmation(message):
+    if message.text.lower() == "да":
+        delete_client(client_data[message.chat.id])
+        bot.send_message(message.chat.id, "✅ Клиент удалён.")
+    else:
+        bot.send_message(message.chat.id, "Удаление отменено.")
+    reset_user_state(message.chat.id)
+    show_menu(message)
+
+@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "🧨 Очистить всю базу")
+def confirm_clear(message):
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add("Да", "Нет")
+    bot.send_message(message.chat.id, "⚠️ Вы уверены, что хотите очистить всю базу?", reply_markup=markup)
+    user_states[message.chat.id] = "clear_confirm"
+
+@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "clear_confirm")
+def handle_clear_confirmation(message):
+    if message.text.lower() == "да":
+        clear_database()
+        bot.send_message(message.chat.id, "✅ База полностью очищена.")
+    else:
+        bot.send_message(message.chat.id, "Очистка отменена.")
+    reset_user_state(message.chat.id)
+    show_menu(message)
+
+# ➕ Добавление клиента
 @bot.message_handler(func=lambda m: is_authorized(m) and m.text == "➕ Добавить")
 def start_add(message):
     user_states[message.chat.id] = "phone"
@@ -74,8 +130,7 @@ def step_subscription_type(message):
     else:
         user_states[message.chat.id] = "subscription_type"
         markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        markup.add("PS Plus Deluxe", "PS Plus Extra")
-        markup.add("PS Plus Essential", "EA Play")
+        markup.add("PS Plus Deluxe", "PS Plus Extra", "PS Plus Essential", "EA Play")
         bot.send_message(message.chat.id, "Выберите тип подписки:", reply_markup=markup)
 
 @bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "subscription_type")
@@ -158,6 +213,7 @@ def handle_codes(message):
         save_client_block(client_data[message.chat.id])
         bot.send_message(message.chat.id, "✅ Клиент добавлен.")
         reset_user_state(message.chat.id)
+        show_menu(message)
     else:
         user_states[message.chat.id] = "awaiting_attachment"
         bot.send_message(message.chat.id, "Пришлите скрин или файл с кодами:")
@@ -178,6 +234,7 @@ def receive_attachment(message):
         save_client_block(client_data[cid])
         bot.send_message(cid, "✅ Клиент добавлен с вложением.")
         reset_user_state(cid)
+        show_menu(message)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("open_client_"))
 def handle_callback(call):
@@ -199,7 +256,7 @@ def notify_loop():
                     markup.add(InlineKeyboardButton("Открыть данные клиента", callback_data=f"open_client_{phone}"))
                     bot.send_message(ALLOWED_USER_ID, msg, reply_markup=markup)
                 if bday:
-                    bot.send_message(ALLOWED_USER_ID, f"У клиента сегодня день рождения:\n{phone}")
+                    bot.send_message(ALLOWED_USER_ID, f"🎉 У клиента сегодня день рождения:\n{phone}")
                     data = get_client_block(phone)
                     if data:
                         bot.send_message(ALLOWED_USER_ID, data)
