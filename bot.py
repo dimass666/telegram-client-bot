@@ -15,7 +15,7 @@ user_states = {}
 client_data = {}
 
 ADD_CLIENT_STEPS = [
-    "phone", "birth", "credentials", "subscription", "start_date", "games"
+    "phone", "birth", "credentials", "ask_subscription", "subscription", "start_date", "games"
 ]
 
 def is_authorized(message):
@@ -37,7 +37,7 @@ def show_menu(message):
     markup.add(KeyboardButton("➕ Добавить"), KeyboardButton("✏️ Редактировать"))
     markup.add(KeyboardButton("🔍 Найти клиента"), KeyboardButton("🗑 Удалить"))
     markup.add(KeyboardButton("📋 Список клиентов"), KeyboardButton("📊 Кол-во по регионам"))
-    markup.add(KeyboardButton("⬇️ Выгрузить базу"))
+    markup.add(KeyboardButton("⬇️ Выгрузить базу"), KeyboardButton("🧨 Очистить всю базу"))
     bot.send_message(message.chat.id, "Меню команд", reply_markup=markup)
 
 @bot.message_handler(func=lambda m: is_authorized(m) and m.text == "➕ Добавить")
@@ -45,6 +45,20 @@ def start_add_client(message):
     user_states[message.chat.id] = "phone"
     client_data[message.chat.id] = []
     bot.send_message(message.chat.id, "Шаг 1/6: Введите номер телефона или Telegram ник клиента:")
+
+@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "ask_subscription")
+def handle_subscription_check(message):
+    answer = message.text.strip().lower()
+    if answer == "да":
+        user_states[message.chat.id] = "subscription"
+        bot.send_message(message.chat.id, "Шаг 4/6: Введите название подписки, срок и регион (например: PS Plus Extra 3м (тур)):")
+    elif answer == "нет":
+        client_data[message.chat.id].append("Нету")
+        client_data[message.chat.id].append("01.01.2000")
+        user_states[message.chat.id] = "games"
+        bot.send_message(message.chat.id, "Шаг 5/6: Укажите игры (каждая с новой строки):")
+    else:
+        bot.send_message(message.chat.id, "Ответьте 'Да' или 'Нет': Есть ли подписка?")
 
 @bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) in ADD_CLIENT_STEPS)
 def handle_add_steps(message):
@@ -58,15 +72,15 @@ def handle_add_steps(message):
     elif state == "birth":
         client_data[message.chat.id].append(value)
         user_states[message.chat.id] = "credentials"
-        bot.send_message(message.chat.id, "Шаг 3/6: Введите email, пароль от аккаунта и пароль от почты (по одному в строке):")
+        bot.send_message(message.chat.id, "Шаг 3/6: Введите email, пароль аккаунта, пароль от почты (каждое на новой строке):")
     elif state == "credentials":
         creds = value.split('\n')
         if len(creds) < 3:
-            bot.send_message(message.chat.id, "Пожалуйста, введите 3 строки: email, пароль аккаунта, пароль почты.")
+            bot.send_message(message.chat.id, "Введите 3 строки: email, пароль, пароль почты.")
             return
         client_data[message.chat.id].extend(creds[:3])
-        user_states[message.chat.id] = "subscription"
-        bot.send_message(message.chat.id, "Шаг 4/6: Введите название подписки, срок и регион (например: PS Plus Extra 3м (тур)):")
+        user_states[message.chat.id] = "ask_subscription"
+        bot.send_message(message.chat.id, "Есть ли у клиента подписка? (Да / Нет)")
     elif state == "subscription":
         client_data[message.chat.id].append(value)
         user_states[message.chat.id] = "start_date"
@@ -74,7 +88,7 @@ def handle_add_steps(message):
     elif state == "start_date":
         client_data[message.chat.id].append(value)
         user_states[message.chat.id] = "games"
-        bot.send_message(message.chat.id, "Шаг 6/6: Укажите игры (каждая с новой строки, можно использовать ———):")
+        bot.send_message(message.chat.id, "Шаг 6/6: Укажите игры (каждая с новой строки):")
     elif state == "games":
         games = value.split('\n')
         client_data[message.chat.id].append("---")
@@ -83,38 +97,72 @@ def handle_add_steps(message):
         bot.send_message(message.chat.id, f"✅ Клиент {client_data[message.chat.id][0]} добавлен.")
         reset_user_state(message.chat.id)
 
-@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "🗑 Удалить")
-def prompt_delete_client(message):
-    user_states[message.chat.id] = "delete_request"
-    bot.send_message(message.chat.id, "Введите номер телефона или ник клиента, которого хотите удалить:")
+@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "🔍 Найти клиента")
+def start_search_client(message):
+    user_states[message.chat.id] = "search_client"
+    bot.send_message(message.chat.id, "Введите номер телефона или ник клиента для поиска:")
 
-@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "delete_request")
-def confirm_delete_client(message):
-    phone = message.text.strip()
-    client = get_client_block(phone)
-    if not client:
+@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "search_client")
+def process_search_client(message):
+    query = message.text.strip()
+    client = get_client_block(query)
+    if client:
+        bot.send_message(message.chat.id, f"Найден клиент:\n{client}")
+    else:
         bot.send_message(message.chat.id, "Клиент не найден.")
-        reset_user_state(message.chat.id)
-        return
+    reset_user_state(message.chat.id)
 
-    client_data[message.chat.id] = phone
-    user_states[message.chat.id] = "confirm_delete"
-    bot.send_message(message.chat.id, f"Найден клиент:\n{client}\n\nУдалить этого клиента? (Да / Нет)")
+@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "📋 Список клиентов")
+def handle_list_clients(message):
+    with sqlite3.connect("clients.db") as conn:
+        c = conn.cursor()
+        c.execute("SELECT phone FROM clients")
+        phones = [row[0] for row in c.fetchall()]
+        if not phones:
+            bot.send_message(message.chat.id, "База пуста.")
+            return
+        for phone in phones:
+            data = get_client_block(phone)
+            bot.send_message(message.chat.id, data)
 
-@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "confirm_delete")
-def handle_delete_confirmation(message):
-    answer = message.text.strip().lower()
-    phone = client_data.get(message.chat.id)
-    if answer == "да":
+@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "📊 Кол-во по регионам")
+def handle_region_stats(message):
+    with sqlite3.connect("clients.db") as conn:
+        c = conn.cursor()
+        c.execute("SELECT type FROM subscriptions")
+        regions = {"тур": 0, "укр": 0, "другое": 0}
+        for (sub_type,) in c.fetchall():
+            if "тур" in sub_type.lower():
+                regions["тур"] += 1
+            elif "укр" in sub_type.lower():
+                regions["укр"] += 1
+            else:
+                regions["другое"] += 1
+        stats = (
+            f"Подписки по регионам:\n"
+            f"Турция: {regions['тур']}\n"
+            f"Украина: {regions['укр']}\n"
+            f"Другое: {regions['другое']}"
+        )
+        bot.send_message(message.chat.id, stats)
+
+@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "🧨 Очистить всю базу")
+def confirm_clear_database(message):
+    user_states[message.chat.id] = "confirm_clear_db"
+    bot.send_message(message.chat.id, "Вы уверены, что хотите удалить всю базу? (Да / Нет)")
+
+@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "confirm_clear_db")
+def clear_database_action(message):
+    if message.text.strip().lower() == "да":
         with sqlite3.connect("clients.db") as conn:
             c = conn.cursor()
-            c.execute("DELETE FROM clients WHERE phone = ?", (phone,))
-            c.execute("DELETE FROM subscriptions WHERE phone = ?", (phone,))
-            c.execute("DELETE FROM games WHERE phone = ?", (phone,))
+            c.execute("DELETE FROM clients")
+            c.execute("DELETE FROM subscriptions")
+            c.execute("DELETE FROM games")
             conn.commit()
-        bot.send_message(message.chat.id, f"✅ Клиент {phone} удалён.")
+        bot.send_message(message.chat.id, "✅ Вся база очищена.")
     else:
-        bot.send_message(message.chat.id, "Удаление отменено.")
+        bot.send_message(message.chat.id, "Операция отменена.")
     reset_user_state(message.chat.id)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("open_client_"))
