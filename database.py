@@ -1,6 +1,7 @@
 import sqlite3
 import datetime
 import pyAesCrypt
+import os
 
 DB_NAME = "clients.db"
 ENCRYPTED_DB_NAME = "clients_encrypted.db"
@@ -16,7 +17,8 @@ def init_db():
         conn.commit()
 
 def encrypt_database():
-    pyAesCrypt.encryptFile(DB_NAME, ENCRYPTED_DB_NAME, ENCRYPTION_PASSWORD, BUFFER_SIZE)
+    if os.path.exists(DB_NAME):
+        pyAesCrypt.encryptFile(DB_NAME, ENCRYPTED_DB_NAME, ENCRYPTION_PASSWORD, BUFFER_SIZE)
 
 def parse_block(lines):
     phone = lines[0]
@@ -44,6 +46,7 @@ def parse_block(lines):
             i += 2
         except:
             i += 1
+
     while i < len(lines):
         games.append(lines[i].strip())
         i += 1
