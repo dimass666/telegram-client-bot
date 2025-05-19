@@ -6,7 +6,7 @@ import threading
 import time
 import os
 
-API_TOKEN = 7832902735:AAGJzhg00l7x2R8jr-eonf5KZF9c8QYQaCY
+API_TOKEN = "7832902735:AAGJzhg00l7x2R8jr-eonf5KZF9c8QYQaCY"
 ALLOWED_USER_ID = 350902460
 
 bot = telebot.TeleBot(API_TOKEN)
