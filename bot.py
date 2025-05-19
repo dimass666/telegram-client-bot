@@ -5,7 +5,6 @@ import datetime
 import threading
 import time
 import os
-import sqlite3
 
 API_TOKEN = "7832902735:AAGJzhg00l7x2R8jr-eonf5KZF9c8QYQaCY"
 ALLOWED_USER_ID = 350902460
@@ -82,25 +81,22 @@ def step_subscription_type(message):
 @bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "subscription_type")
 def step_subscription_duration(message):
     client_data[message.chat.id].append(message.text.strip())
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     if "ea play" in message.text.lower():
-        markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         markup.add("1м", "12м")
     else:
-        markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         markup.add("1м", "3м", "12м")
     user_states[message.chat.id] = "subscription_duration"
     bot.send_message(message.chat.id, "Выберите срок подписки:", reply_markup=markup)
 
-@bot.
-
-message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "subscription_duration")
+@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "subscription_duration")
 def step_subscription_region(message):
     client_data[message.chat.id].append(message.text.strip())
     markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     markup.add("(тур)", "(укр)", "Другой регион")
     user_states[message.chat.id] = "subscription_region"
     bot.send_message(message.chat.id, "Выберите регион:", reply_markup=markup)
-    Dmitry, [20.05.2025 0:52]
+
 @bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "subscription_region")
 def step_subscription_finish(message):
     region = message.text.strip()
@@ -183,14 +179,22 @@ def receive_attachment(message):
         bot.send_message(cid, "✅ Клиент добавлен с вложением.")
         reset_user_state(cid)
 
+@bot.callback_query_handler(func=lambda call: call.data.startswith("open_client_"))
+def handle_callback(call):
+    phone = call.data.split("open_client_")[1]
+    data = get_client_block(phone)
+    if data:
+        bot.send_message(call.message.chat.id, data)
+    else:
+        bot.send_message(call.message.chat.id, "Данные клиента не найдены.")
+
 def notify_loop():
     while True:
         now = datetime.datetime.now()
         if now.hour == 9:
             for phone, typ, months, end, bday in get_upcoming_notifications():
                 if end:
-
-msg = f"Напоминание:\nУ клиента {phone} заканчивается подписка {typ} ({months}м) завтра ({end})"
+                    msg = f"Напоминание:\nУ клиента {phone} заканчивается подписка {typ} ({months}м) завтра ({end})"
                     markup = InlineKeyboardMarkup()
                     markup.add(InlineKeyboardButton("Открыть данные клиента", callback_data=f"open_client_{phone}"))
                     bot.send_message(ALLOWED_USER_ID, msg, reply_markup=markup)
