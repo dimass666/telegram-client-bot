@@ -22,7 +22,7 @@ def encrypt_database():
 
 def parse_block(lines):
     phone = lines[0]
-    birth_date = lines[1]
+    birth = lines[1]
     email = lines[2]
     acc_pass = lines[3]
     mail_pass = lines[4]
@@ -44,14 +44,14 @@ def parse_block(lines):
             end_date = start_date + datetime.timedelta(days=30 * months)
             subs.append((f"{name} {months}м {region}", months, start_date.strftime("%d.%m.%Y"), end_date.strftime("%d.%m.%Y")))
             i += 2
-        except:
+        except Exception:
             i += 1
 
     while i < len(lines):
         games.append(lines[i].strip())
         i += 1
 
-    return phone, birth_date, email, acc_pass, mail_pass, subs, games
+    return phone, birth, email, acc_pass, mail_pass, subs, games
 
 def save_client_block(lines):
     phone, birth, email, acc_pass, mail_pass, subs, games = parse_block(lines)
@@ -84,7 +84,7 @@ def get_client_block(phone):
         c.execute("SELECT name FROM games WHERE phone = ?", (phone,))
         games = c.fetchall()
         if games:
-            result += "\n---\n" + "\n".join([g[0] for g in games])
+            result += "\n---\n" + "\n".join(g[0] for g in games)
         return result
 
 def get_upcoming_notifications():
