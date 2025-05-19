@@ -91,19 +91,22 @@ def step_subscription_duration(message):
     user_states[message.chat.id] = "subscription_duration"
     bot.send_message(message.chat.id, "Выберите срок подписки:", reply_markup=markup)
 
-@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "subscription_duration")
+@bot.
+
+message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "subscription_duration")
 def step_subscription_region(message):
     client_data[message.chat.id].append(message.text.strip())
     markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     markup.add("(тур)", "(укр)", "Другой регион")
     user_states[message.chat.id] = "subscription_region"
     bot.send_message(message.chat.id, "Выберите регион:", reply_markup=markup)
-    @bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "subscription_region")
+    Dmitry, [20.05.2025 0:52]
+@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "subscription_region")
 def step_subscription_finish(message):
     region = message.text.strip()
     if region.lower() == "другой регион":
-        bot.send_message(message.chat.id, "Введите регион вручную (например: (гер)):")
-        return
+        user_states[message.chat.id] = "custom_region"
+        return bot.send_message(message.chat.id, "Введите регион вручную (например: (гер)):")
     finish_subscription_step(message, region)
 
 @bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "custom_region")
@@ -186,7 +189,8 @@ def notify_loop():
         if now.hour == 9:
             for phone, typ, months, end, bday in get_upcoming_notifications():
                 if end:
-                    msg = f"Напоминание:\nУ клиента {phone} заканчивается подписка {typ} ({months}м) завтра ({end})"
+
+msg = f"Напоминание:\nУ клиента {phone} заканчивается подписка {typ} ({months}м) завтра ({end})"
                     markup = InlineKeyboardMarkup()
                     markup.add(InlineKeyboardButton("Открыть данные клиента", callback_data=f"open_client_{phone}"))
                     bot.send_message(ALLOWED_USER_ID, msg, reply_markup=markup)
