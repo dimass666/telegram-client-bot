@@ -87,6 +87,19 @@ def get_client_block(phone):
             result += "\n---\n" + "\n".join(g[0] for g in games)
         return result
 
+def get_all_clients_text():
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("SELECT phone FROM clients")
+        phones = [row[0] for row in c.fetchall()]
+        all_data = []
+
+        for phone in phones:
+            data = get_client_block(phone)
+            if data:
+                all_data.append(data)
+        return all_data
+
 def get_upcoming_notifications():
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
@@ -97,3 +110,19 @@ def get_upcoming_notifications():
         c.execute("SELECT phone, birth_date FROM clients")
         bdays = [(p, b) for p, b in c.fetchall() if b.endswith(today)]
         return [(s[0], s[1], s[2], s[3], None) for s in subs] + [(b[0], "", "", "", b[1]) for b in bdays]
+
+def delete_client(phone):
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("DELETE FROM clients WHERE phone = ?", (phone,))
+        c.execute("DELETE FROM subscriptions WHERE phone = ?", (phone,))
+        c.execute("DELETE FROM games WHERE phone = ?", (phone,))
+        conn.commit()
+
+def clear_database():
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("DELETE FROM clients")
+        c.execute("DELETE FROM subscriptions")
+        c.execute("DELETE FROM games")
+        conn.commit()
