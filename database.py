@@ -93,7 +93,6 @@ def get_all_clients_text():
         c.execute("SELECT phone FROM clients")
         phones = [row[0] for row in c.fetchall()]
         all_data = []
-
         for phone in phones:
             data = get_client_block(phone)
             if data:
