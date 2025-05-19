@@ -1,18 +1,29 @@
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from database import *
 import datetime
 import threading
 import time
 import os
+import sqlite3
 
 API_TOKEN = "7832902735:AAGJzhg00l7x2R8jr-eonf5KZF9c8QYQaCY"
 ALLOWED_USER_ID = 350902460
 
 bot = telebot.TeleBot(API_TOKEN)
+user_states = {}
+client_data = {}
+
+ADD_CLIENT_STEPS = [
+    "phone", "birth", "credentials", "subscription", "start_date", "games"
+]
 
 def is_authorized(message):
     return message.from_user.id == ALLOWED_USER_ID
+
+def reset_user_state(user_id):
+    user_states.pop(user_id, None)
+    client_data.pop(user_id, None)
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -29,56 +40,82 @@ def show_menu(message):
     markup.add(KeyboardButton("⬇️ Выгрузить базу"))
     bot.send_message(message.chat.id, "Меню команд", reply_markup=markup)
 
-@bot.message_handler(func=lambda m: is_authorized(m) and m.text.startswith('+7'))
-def handle_phone_or_block(message):
-    lines = message.text.strip().split('\n')
-    if len(lines) >= 5:
-        phone = lines[0]
-        save_client_block(lines)
-        bot.reply_to(message, f"✅ Клиент {phone} добавлен.")
-    else:
-        client = get_client_block(message.text.strip())
-        if client:
-            bot.send_message(message.chat.id, client)
-        else:
-            bot.send_message(message.chat.id, "Клиент не найден.")
+@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "➕ Добавить")
+def start_add_client(message):
+    user_states[message.chat.id] = "phone"
+    client_data[message.chat.id] = []
+    bot.send_message(message.chat.id, "Шаг 1/6: Введите номер телефона или Telegram ник клиента:")
 
-@bot.message_handler(content_types=['photo', 'document'])
-def handle_attachments(message):
-    if not is_authorized(message) or not message.reply_to_message:
+@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) in ADD_CLIENT_STEPS)
+def handle_add_steps(message):
+    state = user_states[message.chat.id]
+    value = message.text.strip()
+
+    if state == "phone":
+        client_data[message.chat.id].append(value)
+        user_states[message.chat.id] = "birth"
+        bot.send_message(message.chat.id, "Шаг 2/6: Введите дату рождения (дд.мм.гггг):")
+    elif state == "birth":
+        client_data[message.chat.id].append(value)
+        user_states[message.chat.id] = "credentials"
+        bot.send_message(message.chat.id, "Шаг 3/6: Введите email, пароль от аккаунта и пароль от почты (по одному в строке):")
+    elif state == "credentials":
+        creds = value.split('\n')
+        if len(creds) < 3:
+            bot.send_message(message.chat.id, "Пожалуйста, введите 3 строки: email, пароль аккаунта, пароль почты.")
+            return
+        client_data[message.chat.id].extend(creds[:3])
+        user_states[message.chat.id] = "subscription"
+        bot.send_message(message.chat.id, "Шаг 4/6: Введите название подписки, срок и регион (например: PS Plus Extra 3м (тур)):")
+    elif state == "subscription":
+        client_data[message.chat.id].append(value)
+        user_states[message.chat.id] = "start_date"
+        bot.send_message(message.chat.id, "Шаг 5/6: Укажите дату начала подписки (дд.мм.гггг):")
+    elif state == "start_date":
+        client_data[message.chat.id].append(value)
+        user_states[message.chat.id] = "games"
+        bot.send_message(message.chat.id, "Шаг 6/6: Укажите игры (каждая с новой строки, можно использовать ———):")
+    elif state == "games":
+        games = value.split('\n')
+        client_data[message.chat.id].append("---")
+        client_data[message.chat.id].extend(games)
+        save_client_block(client_data[message.chat.id])
+        bot.send_message(message.chat.id, f"✅ Клиент {client_data[message.chat.id][0]} добавлен.")
+        reset_user_state(message.chat.id)
+
+@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "🗑 Удалить")
+def prompt_delete_client(message):
+    user_states[message.chat.id] = "delete_request"
+    bot.send_message(message.chat.id, "Введите номер телефона или ник клиента, которого хотите удалить:")
+
+@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "delete_request")
+def confirm_delete_client(message):
+    phone = message.text.strip()
+    client = get_client_block(phone)
+    if not client:
+        bot.send_message(message.chat.id, "Клиент не найден.")
+        reset_user_state(message.chat.id)
         return
-    phone = message.reply_to_message.text.strip().split('\n')[0]
-    folder = f"attachments/{phone}"
-    os.makedirs(folder, exist_ok=True)
-    if message.content_type == 'photo':
-        file_id = message.photo[-1].file_id
-        file_info = bot.get_file(file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
-        with open(f"{folder}/{file_id}.jpg", 'wb') as f:
-            f.write(downloaded_file)
-    elif message.content_type == 'document':
-        file_info = bot.get_file(message.document.file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
-        with open(f"{folder}/{message.document.file_name}", 'wb') as f:
-            f.write(downloaded_file)
-    bot.reply_to(message, f"Файл сохранён для клиента {phone}.")
 
-@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "⬇️ Выгрузить базу")
-def send_database(message):
-    with open("clients_encrypted.db", "rb") as f:
-        bot.send_document(message.chat.id, f)
+    client_data[message.chat.id] = phone
+    user_states[message.chat.id] = "confirm_delete"
+    bot.send_message(message.chat.id, f"Найден клиент:\n{client}\n\nУдалить этого клиента? (Да / Нет)")
 
-@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "📋 Список клиентов")
-def list_clients(message):
-    clients = get_all_clients()
-    text = "\n".join(clients)
-    bot.send_message(message.chat.id, text if text else "Клиенты не найдены.")
-
-@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "📊 Кол-во по регионам")
-def region_stats(message):
-    stats = get_region_stats()
-    text = "\n".join([f"{region}: {count}" for region, count in stats.items()])
-    bot.send_message(message.chat.id, text)
+@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "confirm_delete")
+def handle_delete_confirmation(message):
+    answer = message.text.strip().lower()
+    phone = client_data.get(message.chat.id)
+    if answer == "да":
+        with sqlite3.connect("clients.db") as conn:
+            c = conn.cursor()
+            c.execute("DELETE FROM clients WHERE phone = ?", (phone,))
+            c.execute("DELETE FROM subscriptions WHERE phone = ?", (phone,))
+            c.execute("DELETE FROM games WHERE phone = ?", (phone,))
+            conn.commit()
+        bot.send_message(message.chat.id, f"✅ Клиент {phone} удалён.")
+    else:
+        bot.send_message(message.chat.id, "Удаление отменено.")
+    reset_user_state(message.chat.id)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("open_client_"))
 def handle_open_client(call):
@@ -102,10 +139,11 @@ def notify_loop():
                     markup.add(InlineKeyboardButton("Открыть данные клиента", callback_data=f"open_client_{phone}"))
                     bot.send_message(ALLOWED_USER_ID, msg, reply_markup=markup)
                 if birthday:
-                    msg = f"Сегодня день рождения у клиента:\n{phone} ({birthday})"
-                    markup = InlineKeyboardMarkup()
-                    markup.add(InlineKeyboardButton("Открыть данные клиента", callback_data=f"open_client_{phone}"))
-                    bot.send_message(ALLOWED_USER_ID, msg, reply_markup=markup)
+                    msg = f"У клиента сегодня день рождения:\n"
+                    bot.send_message(ALLOWED_USER_ID, msg)
+                    data = get_client_block(phone)
+                    if data:
+                        bot.send_message(ALLOWED_USER_ID, data)
         time.sleep(3600)
 
 init_db()
