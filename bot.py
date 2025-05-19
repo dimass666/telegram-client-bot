@@ -36,7 +36,7 @@ def start(message):
         return bot.reply_to(message, "У тебя нет доступа к этому боту.")
     show_menu(message)
 
-# ➕ Добавить
+# ➕ ДОБАВИТЬ
 @bot.message_handler(func=lambda m: is_authorized(m) and m.text.startswith("➕ Добавить"))
 def start_add(message):
     user_states[message.chat.id] = "phone"
@@ -68,8 +68,7 @@ def step_subscription_question(message):
 
 @bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "has_subscription")
 def step_subscription_type(message):
-    answer = message.text.strip().lower()
-    if answer == "нет":
+    if message.text.strip().lower() == "нет":
         client_data[message.chat.id].append("Нету")
         client_data[message.chat.id].append("01.01.2000")
         ask_games_step(message)
@@ -152,9 +151,10 @@ def ask_codes(message):
 
 @bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "codes_question")
 def handle_codes(message):
+    phone = client_data[message.chat.id][0]
     if message.text.lower() == "нет":
         save_client_block(client_data[message.chat.id])
-        bot.send_message(message.chat.id, "✅ Клиент добавлен.")
+        bot.send_message(message.chat.id, f"✅ Клиент {phone} добавлен.")
         reset_user_state(message.chat.id)
         show_menu(message)
     else:
@@ -175,20 +175,73 @@ def receive_attachment(message):
         with open(os.path.join(folder, filename), "wb") as f:
             f.write(downloaded_file)
         save_client_block(client_data[cid])
-        bot.send_message(cid, "✅ Клиент добавлен с вложением.")
+        bot.send_message(cid, f"✅ Клиент {phone} добавлен с вложением.")
         reset_user_state(cid)
         show_menu(message)
+# 🔍 Найти клиента
+@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "🔍 Найти клиента")
+def start_search(message):
+    bot.send_message(message.chat.id, "Введите номер телефона или ник клиента:")
+    user_states[message.chat.id] = "search_request"
 
+@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "search_request")
+def handle_search(message):
+    phone = message.text.strip()
+    data = get_client_block(phone)
+    if not data:
+        bot.send_message(message.chat.id, "Клиент не найден.")
+        reset_user_state(message.chat.id)
+        return show_menu(message)
+    client_data[message.chat.id] = phone
+    user_states[message.chat.id] = "edit_menu"
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add("📱 Телефон", "📅 Дата рождения")
+    markup.add("🔐 Аккаунт", "🕹 Подписка")
+    markup.add("🎮 Игры", "📎 Резервные коды")
+    markup.add("🗑 Удалить клиента", "❌ Отмена")
+    bot.send_message(message.chat.id, f"Данные клиента:\n{data}", reply_markup=markup)
+
+# ✏️ Редактировать
+@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "✏️ Редактировать")
+def edit_client_start(message):
+    bot.send_message(message.chat.id, "Введите номер телефона или ник клиента для редактирования:")
+    user_states[message.chat.id] = "edit_request"
+
+@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "edit_request")
+def handle_edit_request(message):
+    phone = message.text.strip()
+    data = get_client_block(phone)
+    if not data:
+        bot.send_message(message.chat.id, "Клиент не найден.")
+        reset_user_state(message.chat.id)
+        return show_menu(message)
+    client_data[message.chat.id] = phone
+    user_states[message.chat.id] = "edit_menu"
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add("📱 Телефон", "📅 Дата рождения")
+    markup.add("🔐 Аккаунт", "🕹 Подписка")
+    markup.add("🎮 Игры", "📎 Резервные коды")
+    markup.add("🗑 Удалить клиента", "❌ Отмена")
+    bot.send_message(message.chat.id, f"Данные клиента:\n{data}", reply_markup=markup)
+
+# 📋 Список клиентов
+@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "📋 Список клиентов")
+def handle_list_clients(message):
+    clients = get_all_clients_text()
+    if not clients:
+        return bot.send_message(message.chat.id, "Клиентов пока нет.")
+    for entry in clients:
+        bot.send_message(message.chat.id, entry)
+
+# 📊 Кол-во по регионам
 @bot.message_handler(func=lambda m: is_authorized(m) and m.text == "📊 Кол-во по регионам")
 def handle_region_stats(message):
     with sqlite3.connect("clients.db") as conn:
         c = conn.cursor()
         c.execute("SELECT type FROM subscriptions")
         subs = c.fetchall()
-
     if not subs:
         return bot.send_message(message.chat.id, "Подписок нет в базе.")
-
     tur, ukr, other = 0, 0, 0
     for s in subs:
         stype = s[0].lower()
@@ -198,7 +251,6 @@ def handle_region_stats(message):
             ukr += 1
         else:
             other += 1
-
     bot.send_message(
         message.chat.id,
         f"📊 Кол-во подписок:\n"
@@ -207,6 +259,7 @@ def handle_region_stats(message):
         f"🌍 Другое: {other}"
     )
 
+# ⬇️ Выгрузить базу
 @bot.message_handler(func=lambda m: is_authorized(m) and m.text == "⬇️ Выгрузить базу")
 def export_database(message):
     clients = get_all_clients_text()
@@ -218,14 +271,7 @@ def export_database(message):
         output.seek(0)
         bot.send_document(message.chat.id, output, visible_file_name="clients_export.txt", caption="📎 Ваша база клиентов")
 
-@bot.message_handler(func=lambda m: is_authorized(m) and m.text == "📋 Список клиентов")
-def handle_list_clients(message):
-    clients = get_all_clients_text()
-    if not clients:
-        return bot.send_message(message.chat.id, "Клиентов пока нет.")
-    for entry in clients:
-        bot.send_message(message.chat.id, entry)
-
+# 🧨 Очистка базы
 @bot.message_handler(func=lambda m: is_authorized(m) and m.text == "🧨 Очистить всю базу")
 def confirm_clear(message):
     markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
@@ -242,6 +288,16 @@ def handle_clear_confirmation(message):
         bot.send_message(message.chat.id, "Очистка отменена.")
     reset_user_state(message.chat.id)
     show_menu(message)
+
+# ⏰ Уведомления
+@bot.callback_query_handler(func=lambda call: call.data.startswith("open_client_"))
+def handle_callback(call):
+    phone = call.data.split("open_client_")[1]
+    data = get_client_block(phone)
+    if data:
+        bot.send_message(call.message.chat.id, data)
+    else:
+        bot.send_message(call.message.chat.id, "Данные клиента не найдены.")
 
 def notify_loop():
     while True:
@@ -260,6 +316,7 @@ def notify_loop():
                         bot.send_message(ALLOWED_USER_ID, data)
         time.sleep(3600)
 
+# 🚀 Запуск
 init_db()
 threading.Thread(target=notify_loop, daemon=True).start()
 bot.infinity_polling()
