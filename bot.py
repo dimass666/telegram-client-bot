@@ -62,7 +62,8 @@ def handle_ask_games(message):
         bot.send_message(cid, "Введите список игр (каждая с новой строки):")
     else:
         bot.send_message(cid, "Пожалуйста, выбери: Игры не куплены / Игры куплены.")
-        @bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "ask_attachment")
+
+@bot.message_handler(func=lambda m: is_authorized(m) and user_states.get(m.chat.id) == "ask_attachment")
 def handle_attachment_question(message):
     cid = message.chat.id
     answer = message.text.strip().lower()
@@ -131,7 +132,7 @@ def handle_add_steps(message):
         client_data[cid].append(value)
         user_states[cid] = "subscription_duration"
         bot.send_message(cid, "Укажите срок подписки (в месяцах, например: 3):")
-elif state == "subscription_duration":
+    elif state == "subscription_duration":
         client_data[cid].append(value)
         user_states[cid] = "subscription_region"
         bot.send_message(cid, "Укажите регион (например: (тур) или (укр)):")
