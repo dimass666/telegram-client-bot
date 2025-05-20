@@ -154,6 +154,32 @@ def update_attachment_edit(message):
     reset_user_state(message.chat.id)
     show_menu(message)
 
+@bot.callback_query_handler(func=lambda call: call.data.startswith("open_client_"))
+def handle_callback(call):
+    phone = call.data.split("open_client_")[1]
+    data = get_client_block(phone)
+    if data:
+        bot.send_message(call.message.chat.id, data)
+    else:
+        bot.send_message(call.message.chat.id, "Данные клиента не найдены.")
+
+def notify_loop():
+    while True:
+        now = datetime.datetime.now()
+        if now.hour == 9:
+            for phone, typ, months, end, bday in get_upcoming_notifications():
+                if end:
+                    msg = f"Напоминание:\nУ клиента {phone} заканчивается подписка {typ} ({months}м) завтра ({end})"
+                    markup = InlineKeyboardMarkup()
+                    markup.add(InlineKeyboardButton("Открыть данные клиента", callback_data=f"open_client_{phone}"))
+                    bot.send_message(ALLOWED_USER_ID, msg, reply_markup=markup)
+                if bday:
+                    bot.send_message(ALLOWED_USER_ID, f"🎉 У клиента сегодня день рождения:\n{phone}")
+                    data = get_client_block(phone)
+                    if data:
+                        bot.send_message(ALLOWED_USER_ID, data)
+        time.sleep(3600)
+
 init_db()
 threading.Thread(target=notify_loop, daemon=True).start()
 bot.infinity_polling()
