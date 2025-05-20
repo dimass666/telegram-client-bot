@@ -72,7 +72,7 @@ def collect_birth_date(message):
     ask_account_info(message)
 
 def ask_account_info(message):
-    bot.send_message(message.chat.id, "Шаг 3: Введите:\nemail\nпароль\nпароль от почты (можно пусто)")\nemail\nпароль\nпароль от почты (можно пусто)")
+bot.send_message(message.chat.id, "Шаг 3: Введите:\nemail\nпароль\nпароль от почты (можно пусто)")
 email
 пароль
 пароль от почты (можно пусто)")
