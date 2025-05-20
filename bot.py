@@ -1,6 +1,9 @@
 import telebot
 from telebot import types
-from database import init_db, add_client, get_client_by_identifier, update_client_field
+from database import (
+    init_db, add_client, get_client_by_identifier,
+    update_client_field, delete_client_by_id
+)
 from datetime import datetime, timedelta
 
 bot = telebot.TeleBot("7636123092:AAEAnU8iuShy7UHjH2cwzt1vRA-Pl3e3od8")
@@ -72,14 +75,11 @@ def collect_birth_date(message):
     ask_account_info(message)
 
 def ask_account_info(message):
-bot.send_message(message.chat.id, "Шаг 3: Введите:\nemail\nпароль\nпароль от почты (можно пусто)")
-email
-пароль
-пароль от почты (можно пусто)")
+    bot.send_message(message.chat.id, "Шаг 3: Введите:\nemail\nпароль\nпароль от почты (можно пусто)")
     bot.register_next_step_handler(message, process_account_info)
 
 def process_account_info(message):
-    lines = message.text.split("\n")
+    lines = message.text.split('\n')
     email = lines[0] if len(lines) > 0 else ""
     password = lines[1] if len(lines) > 1 else ""
     mail_pass = lines[2] if len(lines) > 2 else ""
@@ -123,11 +123,10 @@ def collect_first_subscription(message):
     markup.add("12м", "3м", "1м", "Отмена")
     bot.send_message(message.chat.id, "Срок первой подписки:", reply_markup=markup)
     bot.register_next_step_handler(message, collect_first_duration)
-
 def collect_first_duration(message):
     client_data["sub1_duration"] = message.text
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    markup.add("(укр)", "(тур)", "(другой)")
+    markup.add("(укр)", "(тур)", "(другое)")
     bot.send_message(message.chat.id, "Регион первой подписки:", reply_markup=markup)
     bot.register_next_step_handler(message, collect_first_region)
 
@@ -149,11 +148,7 @@ def calculate_subscriptions(message):
     client_data["subscription_name"] = f"{client_data['sub1_type']} {client_data['sub1_duration']} {client_data['sub1_region']}"
 
     if client_data.get("subs_total") == "Две":
-        # предлагать вторую только из другой категории
-        if "EA Play" in client_data["sub1_type"]:
-            second = ["PS Plus Deluxe", "PS Plus Extra", "PS Plus Essential"]
-        else:
-            second = ["EA Play"]
+        second = ["EA Play"] if "PS Plus" in client_data["sub1_type"] else ["PS Plus Deluxe", "PS Plus Extra", "PS Plus Essential"]
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         for s in second:
             markup.add(s)
@@ -210,7 +205,7 @@ def collect_games(message):
         clear_chat(message.chat.id)
 
 def save_games(message):
-    games = message.text.split("\n")
+    games = message.text.split('\n')
     client_data["games"] = " —— ".join(games)
     finish_add(message)
 
@@ -230,11 +225,6 @@ def finish_add(message):
     add_client(data)
     clear_chat(message.chat.id)
     bot.send_message(message.chat.id, f"✅ {client_data['username']} успешно добавлен!", reply_markup=main_menu)
-
-if __name__ == "__main__":
-    init_db()
-    bot.polling(none_stop=True)
-
 @bot.message_handler(func=lambda m: m.text == "🔍 Найти клиента")
 def search_client(message):
     if message.from_user.id != admin_id:
@@ -266,7 +256,8 @@ def show_client_data(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     markup.add("Изменить номер", "Изменить дату рождения")
     markup.add("Изменить аккаунт", "Изменить подписку")
-    markup.add("Изменить игры", "Отмена")
+    markup.add("Изменить игры", "Удалить клиента")
+    markup.add("Отмена")
     bot.send_message(message.chat.id, text, reply_markup=markup)
     client_data["id"] = id_
     bot.register_next_step_handler(message, handle_edit_choice)
@@ -279,16 +270,19 @@ def handle_edit_choice(message):
         msg = bot.send_message(message.chat.id, "Введите новую дату рождения (дд.мм.гггг):")
         bot.register_next_step_handler(msg, lambda m: update_field(m, "birth_date"))
     elif message.text == "Изменить аккаунт":
-        msg = bot.send_message(message.chat.id, "Введите:
-email
-пароль
-пароль от почты")
+        msg = bot.send_message(message.chat.id, "Введите:\nemail\nпароль\nпароль от почты")
         bot.register_next_step_handler(msg, update_account_info)
     elif message.text == "Изменить подписку":
-        update_subscription_flow(message)
+        msg = bot.send_message(message.chat.id, "Введите новую подписку (текстом):")
+        bot.register_next_step_handler(msg, lambda m: update_field(m, "subscription_name"))
     elif message.text == "Изменить игры":
         msg = bot.send_message(message.chat.id, "Введите список игр (по строкам):")
         bot.register_next_step_handler(msg, update_games)
+    elif message.text == "Удалить клиента":
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        markup.add("Да", "Нет")
+        bot.send_message(message.chat.id, "Вы точно хотите удалить клиента?", reply_markup=markup)
+        bot.register_next_step_handler(message, confirm_deletion)
     else:
         bot.send_message(message.chat.id, "Отмена", reply_markup=main_menu)
 
@@ -312,33 +306,14 @@ def update_games(message):
     update_client_field(client_data["id"], "games", games_joined)
     bot.send_message(message.chat.id, "Игры обновлены!", reply_markup=main_menu)
 
-def update_subscription_flow(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    markup.add("Заменить текущую", "Добавить вторую", "Отмена")
-    bot.send_message(message.chat.id, "Что хотите сделать с подпиской?", reply_markup=markup)
-    bot.register_next_step_handler(message, subscription_update_step)
-
-def subscription_update_step(message):
-    current = get_client_by_identifier(client_data["id"])
-    current_sub = current[6] if current else ""
-    if message.text == "Заменить текущую":
-        bot.send_message(message.chat.id, "Введите новую подписку (название, срок, регион):")
-        bot.register_next_step_handler(message, lambda m: update_field(m, "subscription_name"))
-    elif message.text == "Добавить вторую":
-        if "EA Play" in current_sub:
-            choices = ["PS Plus Deluxe", "PS Plus Extra", "PS Plus Essential"]
-        else:
-            choices = ["EA Play"]
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        for item in choices:
-            markup.add(item)
-        bot.send_message(message.chat.id, "Выберите вторую подписку:", reply_markup=markup)
-        bot.register_next_step_handler(message, lambda m: handle_second_sub(m, current_sub))
+def confirm_deletion(message):
+    if message.text == "Да":
+        delete_client_by_id(client_data["id"])
+        bot.send_message(message.chat.id, "Клиент удалён.", reply_markup=main_menu)
     else:
-        bot.send_message(message.chat.id, "Отмена", reply_markup=main_menu)
+        bot.send_message(message.chat.id, "Удаление отменено.", reply_markup=main_menu)
 
-def handle_second_sub(message, current_sub):
-    new = message.text.strip()
-    combined = f"{current_sub} + {new}"
-    update_client_field(client_data["id"], "subscription_name", combined)
-    bot.send_message(message.chat.id, "Подписка обновлена!", reply_markup=main_menu)
+# === запуск ===
+if __name__ == "__main__":
+    init_db()
+    bot.infinity_polling()
