@@ -1,12 +1,9 @@
 import telebot
-import os
-from dotenv import load_dotenv
-from database import init_db, add_client, get_all_clients
 from telebot import types
+from database import init_db, add_client, get_all_clients
 
-load_dotenv()
-bot = telebot.TeleBot(os.getenv("BOT_TOKEN"))
-admin_id = int(os.getenv("ADMIN_ID"))
+bot = telebot.TeleBot("7636123092:AAEAnU8iuShy7UHjH2cwzt1vRA-Pl3e3od8")
+admin_id = 350902460
 
 main_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
 main_menu.row("➕ Добавить", "✏️ Редактировать")
@@ -118,22 +115,14 @@ def list_clients(message):
     clients = get_all_clients()
     for client in clients:
         text = (
-            f"Имя: {client[1]}
-"
-            f"Дата рождения: {client[2]}
-"
-            f"Email: {client[3]}
-"
-            f"Пароль: {client[4]}
-"
-            f"Почта: {client[5]}
-"
-            f"Подписка: {client[6]} ({client[7]} - {client[8]})
-"
-            f"Регион: {client[9]}
-"
-            f"Игры:
-{client[10]}"
+            f"Имя: {client[1]}\n"
+            f"Дата рождения: {client[2]}\n"
+            f"Email: {client[3]}\n"
+            f"Пароль: {client[4]}\n"
+            f"Почта: {client[5]}\n"
+            f"Подписка: {client[6]} ({client[7]} - {client[8]})\n"
+            f"Регион: {client[9]}\n"
+            f"Игры:\n{client[10]}"
         )
         bot.send_message(message.chat.id, text)
 
