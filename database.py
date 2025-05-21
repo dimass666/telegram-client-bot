@@ -15,7 +15,8 @@ def init_db():
             subscription_start TEXT,
             subscription_end TEXT,
             region TEXT,
-            games TEXT
+            games TEXT,
+            reserve_photo TEXT
         )
     ''')
     conn.commit()
@@ -28,8 +29,8 @@ def add_client(data):
         INSERT INTO clients (
             username, birth_date, email, account_password,
             mail_password, subscription_name, subscription_start,
-            subscription_end, region, games
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            subscription_end, region, games, reserve_photo
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', data)
     conn.commit()
     conn.close()
@@ -43,12 +44,13 @@ def get_client_by_identifier(identifier):
     return result
 
 def update_client_field(client_id, field, new_value):
-    if field not in [
+    allowed_fields = [
         "username", "birth_date", "email", "account_password",
         "mail_password", "subscription_name", "subscription_start",
-        "subscription_end", "region", "games"
-    ]:
-        raise ValueError("Недопустимое поле")
+        "subscription_end", "region", "games", "reserve_photo"
+    ]
+    if field not in allowed_fields:
+        raise ValueError("Недопустимое поле для обновления")
     conn = sqlite3.connect("clients.db")
     c = conn.cursor()
     c.execute(f"UPDATE clients SET {field} = ? WHERE id = ?", (new_value, client_id))
